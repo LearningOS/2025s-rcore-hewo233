@@ -23,6 +23,9 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 
+/// Maximum number of syscalls supported for tracing
+pub const MAX_SYSCALL_NUM: usize = 512;
+
 /// The task manager, where all the tasks are managed.
 ///
 /// Functions implemented on `TaskManager` deals with all task state transitions
@@ -54,6 +57,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            trace_call: [0; MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +139,25 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn syscall_trace(&self, syscall_id: usize) {
+        // println!("trace syscall id: {}", syscall_id);
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < MAX_SYSCALL_NUM {
+            inner.tasks[current].trace_call[syscall_id] += 1;
+        }
+    }
+
+    fn get_syscall_trace(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < MAX_SYSCALL_NUM {
+            inner.tasks[current].trace_call[syscall_id]
+        } else {
+            0
+        }
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +191,14 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Increment the syscall trace count for a given syscall ID.
+pub fn increment_syscall_trace(syscall_id: usize) {
+    TASK_MANAGER.syscall_trace(syscall_id);
+}
+
+/// Get the syscall trace count for a given syscall ID.
+pub fn get_syscall_trace(syscall_id: usize) -> isize {
+    TASK_MANAGER.get_syscall_trace(syscall_id) as isize
 }
