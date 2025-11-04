@@ -179,3 +179,69 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     }
     v
 }
+
+/// Write data to user space through page table
+pub fn write_user_space(token: usize, ptr: *mut u8, len: usize, data: &[u8]) {
+    let buffers = translated_byte_buffer(token, ptr as *const u8, len);
+    
+    let mut offset = 0;
+    for buffer in buffers {
+        let remain = data.len().saturating_sub(offset);
+        if remain == 0 {
+            break;
+        }
+        let write_len = buffer.len().min(remain);
+        buffer[..write_len].copy_from_slice(&data[offset..offset + write_len]);
+        offset += write_len;
+    }
+}
+
+/// Check if user can read from the address
+pub fn check_user_readable(token: usize, ptr: *const u8, len: usize) -> bool {
+    let page_table = PageTable::from_token(token);
+    let mut start = ptr as usize;
+    let end = start + len;
+    
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let vpn = start_va.floor();
+        
+        if let Some(pte) = page_table.translate(vpn) {
+            if !pte.is_valid() || !pte.flags().contains(PTEFlags::U) || !pte.readable() {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        
+        let mut next_vpn = vpn;
+        next_vpn.step();
+        start = VirtAddr::from(next_vpn).0.min(end);
+    }
+    true
+}
+
+/// Check if user can write to the address
+pub fn check_user_writable(token: usize, ptr: *mut u8, len: usize) -> bool {
+    let page_table = PageTable::from_token(token);
+    let mut start = ptr as usize;
+    let end = start + len;
+    
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let vpn = start_va.floor();
+        
+        if let Some(pte) = page_table.translate(vpn) {
+            if !pte.is_valid() || !pte.flags().contains(PTEFlags::U) || !pte.writable() {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        
+        let mut next_vpn = vpn;
+        next_vpn.step();
+        start = VirtAddr::from(next_vpn).0.min(end);
+    }
+    true
+}

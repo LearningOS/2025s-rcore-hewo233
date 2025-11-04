@@ -24,6 +24,9 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 
+/// Maximum syscall number supported
+pub const MAX_SYSCALL_NUM: usize = 512;
+
 /// The task manager, where all the tasks are managed.
 ///
 /// Functions implemented on `TaskManager` deals with all task state transitions
@@ -153,6 +156,25 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn syscall_trace(&self, syscall_id: usize) {
+        // println!("trace syscall id: {}", syscall_id);
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < MAX_SYSCALL_NUM {
+            inner.tasks[current].trace_call[syscall_id] += 1;
+        }
+    }
+
+    fn get_syscall_trace(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if syscall_id < MAX_SYSCALL_NUM {
+            inner.tasks[current].trace_call[syscall_id]
+        } else {
+            0
+        }
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +223,14 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Increment the syscall trace count for a given syscall ID.
+pub fn increment_syscall_trace(syscall_id: usize) {
+    TASK_MANAGER.syscall_trace(syscall_id);
+}
+
+/// Get the syscall trace count for a given syscall ID.
+pub fn get_syscall_trace(syscall_id: usize) -> isize {
+    TASK_MANAGER.get_syscall_trace(syscall_id) as isize
 }
