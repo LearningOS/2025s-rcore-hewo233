@@ -262,6 +262,84 @@ impl MemorySet {
             false
         }
     }
+
+    /// mmap
+    pub fn mmap(&mut self, start: VirtAddr, len: usize, prot: usize) -> isize {
+        let end = VirtAddr::from(usize::from(start) + len);
+        
+        if (prot & (!0b111) != 0) || (prot & 0b111 == 0) {
+            return -1;
+        }
+
+        if !start.aligned() {
+            return -1;
+        }
+
+        if len == 0 {
+            return 0;
+        }
+
+        let vpn_start = start.floor();
+        let vpn_end = end.ceil();
+
+        for vpn in VPNRange::new(vpn_start, vpn_end) {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+        }
+
+        let mut perm = MapPermission::U;
+        if prot & 0b001 != 0 {
+            perm |= MapPermission::R;
+        }
+        if prot & 0b010 != 0 {
+            perm |= MapPermission::W;
+        }
+        if prot & 0b100 != 0 {
+            perm |= MapPermission::X;
+        }
+        
+        let map_area = MapArea::new(start, VirtAddr::from(vpn_end), MapType::Framed, perm);
+        
+        self.push(map_area, None);
+
+        0
+    }
+
+    /// munmap
+    pub fn munmap(&mut self, start: VirtAddr, len: usize) -> isize {
+        let end = VirtAddr::from(usize::from(start) + len);
+        
+        if !start.aligned() {
+            return -1;
+        }
+
+        if len == 0 {
+            return 0;
+        }
+
+        let vpn_start = start.floor();
+        let vpn_end = end.ceil();
+
+        for vpn in VPNRange::new(vpn_start, vpn_end) {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if !pte.is_valid() {
+                    return -1;
+                }
+            } else {
+                return -1;
+            }
+        }
+
+        for vpn in VPNRange::new(vpn_start, vpn_end) {
+            self.page_table.unmap(vpn);
+        }
+
+        0
+    }
+
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

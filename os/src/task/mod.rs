@@ -20,6 +20,7 @@ use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
+use crate::mm::VirtAddr;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
@@ -175,6 +176,18 @@ impl TaskManager {
             0
         }
     }
+
+    fn mmap(&self, start: VirtAddr, len: usize, prot: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].memory_set.mmap(start, len, prot)
+    }
+
+    fn munmap(&self, start: VirtAddr, len: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].memory_set.munmap(start, len)
+    }
 }
 
 /// Run the first task in task list.
@@ -233,4 +246,14 @@ pub fn increment_syscall_trace(syscall_id: usize) {
 /// Get the syscall trace count for a given syscall ID.
 pub fn get_syscall_trace(syscall_id: usize) -> isize {
     TASK_MANAGER.get_syscall_trace(syscall_id) as isize
+}
+
+/// task mmap
+pub fn task_mmap(_start: VirtAddr, mmap_len: usize, prot: usize) -> isize {
+    TASK_MANAGER.mmap(_start, mmap_len, prot)
+}
+
+/// task munmap
+pub fn task_munmap(_start: VirtAddr, len: usize) -> isize {
+    TASK_MANAGER.munmap(_start, len)
 }
