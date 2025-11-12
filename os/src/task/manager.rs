@@ -23,7 +23,27 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        // now use stride scheduling
+        if self.ready_queue.is_empty() {
+            return None;
+        }
+        let mut min_index = 0;
+        let mut min_stride = self.ready_queue[0].inner_exclusive_access().stride;
+        for (i, task) in self.ready_queue.iter().enumerate() {
+            let stride_now = task.inner_exclusive_access().stride;
+            if stride_now < min_stride {
+                min_stride = stride_now;
+                min_index = i;
+            }
+        }
+
+        let task = self.ready_queue.remove(min_index).unwrap();
+        {
+            let mut inner = task.inner_exclusive_access();
+            inner.stride += inner.get_pass();
+        }
+        // println!("Scheduler selected pid={} with stride={}", task.pid.0, task.inner_exclusive_access().stride);
+        Some(task)
     }
 }
 

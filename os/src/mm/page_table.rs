@@ -213,3 +213,21 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .unwrap()
         .get_mut()
 }
+
+/// translated_write
+pub fn translated_write<T: Sized>(token: usize, ptr: *mut T, data: T) {
+    let page_table = PageTable::from_token(token);
+    let size = core::mem::size_of::<T>();
+    let datas = &data as *const T as *const u8;
+
+    for i in 0..size {
+        let va = (ptr as usize) + i;
+        let dst_byte = page_table
+            .translate_va(VirtAddr::from(va))
+            .unwrap()
+            .get_mut();
+        unsafe {
+            *dst_byte = *(datas.add(i));
+        }
+    }
+}

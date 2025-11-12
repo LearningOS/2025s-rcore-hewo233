@@ -11,6 +11,7 @@ use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
+use crate::mm::VirtAddr;
 
 /// Processor management structure
 pub struct Processor {
@@ -44,6 +45,21 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
+
+    ///mmap
+    fn mmap(&self, start: VirtAddr, len: usize, prot: usize) -> isize {
+        let task = self.current.as_ref().unwrap();
+        let mut inner = task.inner_exclusive_access();
+        inner.memory_set.mmap(start, len, prot)
+    }
+
+    ///munmap
+    fn munmap(&self, start: VirtAddr, len: usize) -> isize {
+        let task = self.current.as_ref().unwrap();
+        let mut inner = task.inner_exclusive_access();
+        inner.memory_set.munmap(start, len)
+    }
+
 }
 
 lazy_static! {
@@ -108,4 +124,14 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// mmap
+pub fn task_mmap(_start: VirtAddr, mmap_len: usize, prot: usize) -> isize {
+    PROCESSOR.exclusive_access().mmap(_start, mmap_len, prot)
+}
+
+/// munmap
+pub fn task_munmap(_start: VirtAddr, munmap_len: usize) -> isize {
+    PROCESSOR.exclusive_access().munmap(_start, munmap_len)
 }
